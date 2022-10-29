@@ -42,38 +42,49 @@ def send_message(bot, message):
     except Exception as error:
         logging.error(f'Сообщение не было отправлено из-за {error}')
 
+
 def get_api_answer(current_timestamp):
-    """Делаем запрос к эндпоинту"""
+    """Делаем запрос к эндпоинту."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     response = requests.get(ENDPOINT, headers=HEADERS, params=params)
     if response.status_code != 200:
         logging.error('Вернулся некорректный статус API')
         raise Exception('Вернулся некорректный статус API')
-    return response.json()    
+    return response.json()
+
 
 def check_response(response):
-    """Проверяем ответ от API"""
+    """Проверяем ответ от API."""
     if not isinstance(response['homeworks'], list):
-        logging.error(f'Ответ пришел не ввиде списка, а в виде {type(response)}')
-        raise TypeError(f'Ответ пришел не ввиде списка, а в виде {type(response)}')
+        logging.error(
+            f'Ответ пришел не ввиде списка, а в виде {type(response)}'
+        )
+        raise TypeError(
+            f'Ответ пришел не ввиде списка, а в виде {type(response)}'
+        )
     if 'homeworks' not in response:
-        logging.error(f'В ответ пришла ошибка')
-        raise KeyError(f'В ответ пришла ошибка')
+        logging.error('В ответ пришла ошибка')
+        raise KeyError('В ответ пришла ошибка')
     return response['homeworks']
-    
+
+
 def parse_status(homework):
+    """Извлекает статус из конкретной домашней работы."""
     homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
     verdict = HOMEWORK_STATUSES[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
+
 def check_tokens():
+    """Проверяет доступность токенов."""
     return all((PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID))
+
 
 def main():
     """Основная логика работы бота."""
-    if check_tokens() == False:
+    if check_tokens() is False:
         logging.critical('Один из токенов не рабочий.')
         raise NoMsgException
     bot = telegram.Bot(token=TELEGRAM_TOKEN)

@@ -1,0 +1,2 @@
+class NoMsgException(Exception):
+    pass

@@ -5,16 +5,18 @@ from dotenv import load_dotenv
 import time
 import requests
 import logging
-from exceptions import NoMsgException
+from exceptions import SendMessageError, WrongApiAnswer
+from exceptions import InvalidStatusHomeWork, InvalidNameHomeWork
+from http import HTTPStatus
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler(sys.stdout)
 logger.addHandler(handler)
 formatter = logging.Formatter(
-    '%(asctime)s - %(message)s'
+    '%(asctime)s, %(levelname)s, %(message)s'
 )
 handler.setFormatter(formatter)
 
@@ -26,6 +28,7 @@ RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
+DAYS3_AGO = 259200
 
 HOMEWORK_STATUSES = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
@@ -37,35 +40,52 @@ HOMEWORK_STATUSES = {
 def send_message(bot, message):
     """Отправка сообщения в Телеграм."""
     try:
+        logger.info('Отправляем сообщение в телеграм')
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logging.info('Сообщение отправлено удачно')
     except Exception as error:
-        logging.error(f'Сообщение не было отправлено из-за {error}')
+        raise SendMessageError(error)
+    else:
+        logger.info('Сообщение отправлено удачно')
 
 
 def get_api_answer(current_timestamp):
     """Делаем запрос к эндпоинту."""
-    timestamp = current_timestamp or int(time.time())
+    timestamp = current_timestamp - DAYS3_AGO
     params = {'from_date': timestamp}
-    response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    if response.status_code != 200:
-        logging.error('Вернулся некорректный статус API')
-        raise Exception('Вернулся некорректный статус API')
+    requests_params = {
+        'url': ENDPOINT,
+        'headers': HEADERS,
+        'params': params,
+    }
+    logger.info('Делаем запрос к API')
+    try:
+        response = requests.get(**requests_params)
+        if response.status_code != HTTPStatus.OK:
+            raise WrongApiAnswer(
+                f'Запрос к {ENDPOINT} вернул статус {response.status_code}, '
+                'Мы ожидаем статус ответа - 200.'
+            )
+        else:
+            logger.info('Запрос к API прошел успешно')
+    except Exception as error:
+        raise WrongApiAnswer(
+            f'При запросе к {ENDPOINT} вернулась ошибка "{error}" '
+            f'Код ответа API - "{response.status_code}" '
+            f'Параметры запроса: "{params}"'
+        )
     return response.json()
 
 
 def check_response(response):
     """Проверяем ответ от API."""
     if not isinstance(response['homeworks'], list):
-        logging.error(
-            f'Ответ пришел не ввиде списка, а в виде {type(response)}'
-        )
         raise TypeError(
             f'Ответ пришел не ввиде списка, а в виде {type(response)}'
         )
     if 'homeworks' not in response:
-        logging.error('В ответ пришла ошибка')
         raise KeyError('В ответ пришла ошибка')
+    else:
+        logger.info('Ответ API проверен')
     return response['homeworks']
 
 
@@ -73,6 +93,16 @@ def parse_status(homework):
     """Извлекает статус из конкретной домашней работы."""
     homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
+    if homework_status not in HOMEWORK_STATUSES:
+        raise InvalidStatusHomeWork(
+            'Статус домашней работы не в списке статусов'
+        )
+    if not homework_name:
+        raise InvalidNameHomeWork(
+            'Имя домашней работы не в списке имен'
+        )
+    else:
+        logger.info('Получаем статус домашней работы')
     verdict = HOMEWORK_STATUSES[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -85,25 +115,25 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     if check_tokens() is False:
-        logging.critical('Один из токенов не рабочий.')
-        raise NoMsgException
+        raise SystemExit('Один из токенов не рабочий.')
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     while True:
         try:
             response = get_api_answer(current_timestamp)
             homework = check_response(response)
-            current_timestamp = response.get('current_date')
-            if len(homework) != 0:
+            if homework is not None or not homework:
+                logger.info('Есть информация о домашней работе')
                 message = parse_status(homework[0])
                 send_message(bot, message)
             time.sleep(RETRY_TIME)
 
         except Exception as error:
+            logger.error(f'Сообщение не было отправлено из-за: {error}')
             message = f'Сбой в работе программы: {error}'
             send_message(bot, message)
             time.sleep(RETRY_TIME)
-        else:
+        finally:
             time.sleep(RETRY_TIME)
 
 

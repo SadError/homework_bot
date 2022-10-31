@@ -10,12 +10,6 @@ class WrongApiAnswer(Exception):
     pass
 
 
-class InvalidStatusHomeWork(Exception):
-    """Статус домашнй работы не в списке статусов."""
-
-    pass
-
-
 class InvalidNameHomeWork(Exception):
     """Статус домашнй работы не в списке статусов."""
 

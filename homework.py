@@ -5,8 +5,7 @@ from dotenv import load_dotenv
 import time
 import requests
 import logging
-from exceptions import SendMessageError, WrongApiAnswer
-from exceptions import InvalidStatusHomeWork, InvalidNameHomeWork
+from exceptions import SendMessageError, WrongApiAnswer, InvalidNameHomeWork
 from http import HTTPStatus
 
 load_dotenv()
@@ -28,8 +27,6 @@ RETRY_TIME = 600
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
-DAYS3_AGO = 259200
-
 HOMEWORK_STATUSES = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
@@ -50,7 +47,7 @@ def send_message(bot, message):
 
 def get_api_answer(current_timestamp):
     """Делаем запрос к эндпоинту."""
-    timestamp = current_timestamp - DAYS3_AGO
+    timestamp = current_timestamp
     params = {'from_date': timestamp}
     requests_params = {
         'url': ENDPOINT,
@@ -70,7 +67,6 @@ def get_api_answer(current_timestamp):
     except Exception as error:
         raise WrongApiAnswer(
             f'При запросе к {ENDPOINT} вернулась ошибка "{error}" '
-            f'Код ответа API - "{response.status_code}" '
             f'Параметры запроса: "{params}"'
         )
     return response.json()
@@ -94,7 +90,7 @@ def parse_status(homework):
     homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
     if homework_status not in HOMEWORK_STATUSES:
-        raise InvalidStatusHomeWork(
+        raise KeyError(
             'Статус домашней работы не в списке статусов'
         )
     if not homework_name:
@@ -121,9 +117,10 @@ def main():
     while True:
         try:
             response = get_api_answer(current_timestamp)
+            current_timestamp = response.get('current_date')
             homework = check_response(response)
-            if homework is not None or not homework:
-                logger.info('Есть информация о домашней работе')
+            if len(homework) > 0:
+                logger.info('Есть статус домашки')
                 message = parse_status(homework[0])
                 send_message(bot, message)
             time.sleep(RETRY_TIME)

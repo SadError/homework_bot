@@ -10,6 +10,12 @@ class WrongApiAnswer(Exception):
     pass
 
 
+class ApiConnectionError(Exception):
+    """Ошибка соединения при выполнении запроса."""
+
+    pass
+
+
 class InvalidNameHomeWork(Exception):
     """Статус домашнй работы не в списке статусов."""
 

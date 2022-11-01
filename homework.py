@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 import time
 import requests
 import logging
-from exceptions import SendMessageError, WrongApiAnswer, InvalidNameHomeWork
+from exceptions import SendMessageError, WrongApiAnswer
+from exceptions import InvalidNameHomeWork, ApiConnectionError
 from http import HTTPStatus
 
 load_dotenv()
@@ -40,7 +41,9 @@ def send_message(bot, message):
         logger.info('Отправляем сообщение в телеграм')
         bot.send_message(TELEGRAM_CHAT_ID, message)
     except Exception as error:
-        raise SendMessageError(error)
+        raise SendMessageError(
+            f"Ошибка при отправка сообщения в телеграм: {error}"
+        )
     else:
         logger.info('Сообщение отправлено удачно')
 
@@ -65,7 +68,7 @@ def get_api_answer(current_timestamp):
         else:
             logger.info('Запрос к API прошел успешно')
     except Exception as error:
-        raise WrongApiAnswer(
+        raise ApiConnectionError(
             f'При запросе к {ENDPOINT} вернулась ошибка "{error}" '
             f'Параметры запроса: "{params}"'
         )
@@ -79,7 +82,7 @@ def check_response(response):
             f'Ответ пришел не ввиде списка, а в виде {type(response)}'
         )
     if 'homeworks' not in response:
-        raise KeyError('В ответ пришла ошибка')
+        raise KeyError(f'В ответe {response} отсутствует "homeworks"')
     else:
         logger.info('Ответ API проверен')
     return response['homeworks']
@@ -111,7 +114,10 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     if check_tokens() is False:
-        raise SystemExit('Один из токенов не рабочий.')
+        sys.exit(
+            'Проблема с одним из токенов: PRACTICUM_TOKEN, '
+            'TELEGRAM_TOKEN, TELEGRAM_CHAT_ID'
+        )
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     while True:
